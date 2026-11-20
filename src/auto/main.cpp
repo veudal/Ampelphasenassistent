@@ -6,7 +6,6 @@
 #include <OneWire.h>
 #include <RFM69.h>
 
-// Hardware
 OneWire oneWire(PB0);
 DallasTemperature tempSensor(&oneWire);
 GLCD lcd;
