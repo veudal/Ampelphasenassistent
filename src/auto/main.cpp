@@ -60,17 +60,41 @@ float getAverageDistance() {
   return sum / count;
 }
 
+struct Lane {
+  int16_t positionXCm;
+  int16_t positionYCm;
+  uint8_t laneId;
+  uint8_t direction;
+  uint8_t maneuver;
+  uint8_t connectsToLane;
+  uint8_t signalGroupId;
+};
+
+struct MapMessage {
+  float refLatitude;
+  float refLongitude;
+  uint16_t stationId;
+  uint16_t laneWidthCm;
+  uint8_t protocolVersion;
+  uint8_t messageType;
+  uint8_t regionId;
+  uint8_t intersectionId;
+  uint8_t revision;
+  uint8_t laneCount;
+  Lane lanes[4];
+};
+
 struct SpatMessage {
-  int protocolVersion;
-  int messageType;
-  int stationId;
-  int regionId;
-  int intersectionId;
-  int revision;
-  int timeStampMs;
-  int signalGroupId;
-  int phase;
-  int phaseEndsAt;
+  uint16_t timeStampMs;
+  uint16_t phaseEndsAt;
+  uint16_t stationId;
+  uint8_t protocolVersion;
+  uint8_t messageType;
+  uint8_t regionId;
+  uint8_t intersectionId;
+  uint8_t revision;
+  uint8_t signalGroupId;
+  uint8_t phase;
 };
 
 // Setup
@@ -82,7 +106,7 @@ void setup() {
   sensor.begin();
   lcd.begin();
   lcd.setColor(255, 255, 255);
-  lcd.setTextSize(3.5);
+  lcd.setTextSize(2.5);
 }
 
 // Main loop
@@ -90,7 +114,7 @@ void loop() {
   tempSensor.requestTemperatures();
   float distanceCm = getAverageDistance();
   if (distanceCm != -1.0f) {
-    lcd.setCursor(20, 20);
+    lcd.setCursor(20, 10);
     lcd.print("Distance: ");
     lcd.print((int)distanceCm);
     lcd.println("cm  ");
@@ -103,16 +127,37 @@ void loop() {
 
       int remainingMs = (spat.phaseEndsAt - spat.timeStampMs + 60000) % 60000;
 
-      lcd.setCursor(20, 60);
+      lcd.setCursor(20, 50);
       lcd.print("Phase: ");
       lcd.print(spat.phase);
       lcd.print("   ");
-      lcd.setCursor(20, 100);
+      lcd.setCursor(20, 70);
       lcd.print("Ends: ");
-      lcd.print(remainingMs);
-      lcd.print("ms     ");
+      lcd.print(remainingMs / 1000.0);
+      lcd.print("s     ");
+    } else if (radio.DATALEN == sizeof(MapMessage)) {
+      MapMessage map;
+      memcpy(&map, (const void *)radio.DATA, sizeof(map));
+
+      lcd.setCursor(20, 100);
+      lcd.print("Lat: ");
+      lcd.print(map.refLatitude, 4);
+      lcd.print("   ");
+      lcd.setCursor(20, 120);
+      lcd.print("Lon: ");
+      lcd.print(map.refLongitude, 4);
+      lcd.print("   ");
+
+      for (int i = 0; i < map.laneCount && i < 4; i++) {
+        lcd.setCursor(20, 150 + i * 20);
+        lcd.print("L");
+        lcd.print((int)map.lanes[i].laneId);
+        lcd.print(": ");
+        lcd.print(map.lanes[i].positionXCm);
+        lcd.print(",");
+        lcd.print(map.lanes[i].positionYCm);
+        lcd.print("   ");
+      }
     }
   }
-
-  delay(1);
 }

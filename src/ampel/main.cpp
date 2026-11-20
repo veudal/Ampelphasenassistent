@@ -6,12 +6,16 @@
 #define YELLOW_PIN PA9
 #define RED_PIN PA10
 
+#define POTENTIOMETER_PIN PB0
+
 RFM69 radio(PA4, PA0);
 GLCD lcd;
 short direction = -1;
-int messageCounter = 0;
+int SEND_INTERVAL_MS = 100;
 
-const int SEND_INTERVAL_MS = 100;
+const int RECEIVER_ID = 2;
+const short powerLevel = 0;
+
 const int MAP_EVERY_N_MESSAGES = 5;
 
 const int PROTOCOL_VERSION = 2;
@@ -42,59 +46,43 @@ enum LaneDirection { LANE_INGRESS, LANE_EGRESS };
 enum Maneuver { MANEUVER_NONE, MANEUVER_STRAIGHT };
 
 struct SpatMessage {
-  int protocolVersion;
-  int messageType;
-  int stationId;
-  int regionId;
-  int intersectionId;
-  int revision;
-  int timeStampMs;
-  int signalGroupId;
-  int phase;
-  int phaseEndsAt;
+  uint16_t timeStampMs;
+  uint16_t phaseEndsAt;
+  uint16_t stationId;
+  uint8_t protocolVersion;
+  uint8_t messageType;
+  uint8_t regionId;
+  uint8_t intersectionId;
+  uint8_t revision;
+  uint8_t signalGroupId;
+  uint8_t phase;
 };
 
 struct Lane {
-  int laneId;
-  int direction;
-  int maneuver;
-  int positionXCm;
-  int positionYCm;
-  int connectsToLane;
-  int signalGroupId;
+  int16_t positionXCm;
+  int16_t positionYCm;
+  uint8_t laneId;
+  uint8_t direction;
+  uint8_t maneuver;
+  uint8_t connectsToLane;
+  uint8_t signalGroupId;
 };
 
 struct MapMessage {
-  int protocolVersion;
-  int messageType;
-  int stationId;
-  int regionId;
-  int intersectionId;
-  int revision;
   float refLatitude;
   float refLongitude;
-  int laneWidthCm;
-  int laneCount;
+  uint16_t stationId;
+  uint16_t laneWidthCm;
+  uint8_t protocolVersion;
+  uint8_t messageType;
+  uint8_t regionId;
+  uint8_t intersectionId;
+  uint8_t revision;
+  uint8_t laneCount;
   Lane lanes[4];
 };
 
 const short STATE_DELAYS[4] = {6000, 1000, 3000, 6000};
-
-void mockRadioSend(const char *messageType, uint8_t *payload, size_t length) {
-  radio.send(2, payload, length); // receiver id, message, length
-  lcd.setCursor(20, 20);
-  lcd.print("[V2X TX] ");
-  lcd.print(messageType);
-  lcd.print(" ");
-  lcd.print(length);
-  lcd.print(" Bytes   ");
-  lcd.setCursor(20, 60);
-  for (size_t i = 0; i < length && i < 16; i++) {
-    lcd.print(payload[i], HEX);
-    lcd.print(" ");
-  }
-  const char msg[] = "hello there";
-}
 
 Lane makeLane(int laneId, int direction, int maneuver, int xCm, int yCm,
               int connectsToLane, int signalGroupId) {
@@ -129,7 +117,7 @@ void broadcastMapMessage() {
                           SIGNAL_GROUP_ID);
   map.lanes[3] = makeLane(4, LANE_EGRESS, MANEUVER_NONE, -175, -500, 0, 0);
 
-  mockRadioSend("MAP", (uint8_t *)&map, sizeof(MapMessage));
+  radio.send(RECEIVER_ID, &map, sizeof(MapMessage));
 }
 
 void broadcastSpatMessage(unsigned long timeRemainingMs) {
@@ -159,8 +147,7 @@ void broadcastSpatMessage(unsigned long timeRemainingMs) {
   }
 
   spat.phaseEndsAt = (millis() + timeRemainingMs) % 60000;
-
-  mockRadioSend("SPAT", (uint8_t *)&spat, sizeof(SpatMessage));
+  radio.send(RECEIVER_ID, &spat, sizeof(SpatMessage));
 }
 
 void applyLightState(bool red, bool yellow, bool green) {
@@ -175,24 +162,30 @@ void applyLightState(bool red, bool yellow, bool green) {
   while (millis() - start < duration) {
     unsigned long remaining = duration - (millis() - start);
 
+    SEND_INTERVAL_MS =
+        analogRead(POTENTIOMETER_PIN) * 4 + 10; // 10 - 4102ms range
+
+    broadcastSpatMessage(remaining);
+
     if (lastMap == 0 || millis() - lastMap >= 1000) {
+      delay(50); // Important: without delay, the map message cannot be processed on the receiver's site, only one message at a time.
       broadcastMapMessage();
       lastMap = millis();
     }
 
-    broadcastSpatMessage(remaining);
     delay(SEND_INTERVAL_MS);
   }
 }
 
 void setup() {
-  lcd.begin();
-  lcd.setTextSize(2.5);
+  //   lcd.begin();
+  //   lcd.setTextSize(2.5);
   radio.initialize(RF69_433MHZ, 1, 255); // node id, network id
-  radio.setPowerLevel(0);                // Low power for safety
+  radio.setPowerLevel(powerLevel);       // low power for safety
   pinMode(GREEN_PIN, OUTPUT);
   pinMode(YELLOW_PIN, OUTPUT);
   pinMode(RED_PIN, OUTPUT);
+  pinMode(POTENTIOMETER_PIN, INPUT);
 }
 
 void loop() {
