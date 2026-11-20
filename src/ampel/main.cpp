@@ -157,7 +157,7 @@ void applyLightState(bool red, bool yellow, bool green) {
 
   unsigned long start = millis();
   unsigned long duration = STATE_DELAYS[state];
-  unsigned long lastMap = 0;
+  unsigned long lastMapBroadcast = 0;
 
   while (millis() - start < duration) {
     unsigned long remaining = duration - (millis() - start);
@@ -167,10 +167,10 @@ void applyLightState(bool red, bool yellow, bool green) {
 
     broadcastSpatMessage(remaining);
 
-    if (lastMap == 0 || millis() - lastMap >= 1000) {
-      delay(50); // Important: without delay, the map message cannot be processed on the receiver's site, only one message at a time.
+    if (lastMapBroadcast == 0 || millis() - lastMapBroadcast >= 1000) {
+      delay(100); // Important: without delay, the map message cannot be processed on the receiver's site, only one message at a time.
       broadcastMapMessage();
-      lastMap = millis();
+      lastMapBroadcast = millis();
     }
 
     delay(SEND_INTERVAL_MS);

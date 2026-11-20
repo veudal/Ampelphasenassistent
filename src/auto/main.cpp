@@ -4,18 +4,15 @@
 #include <GLCD.h>
 #include <OneWire.h>
 #include <RFM69.h>
-#include <Ultrasonic.h>
+#include <HCSR04.h>
 
 #define ONE_WIRE_BUS PA0
 
-OneWire oneWire(PA0);
+OneWire oneWire(PB0);
 DallasTemperature tempSensor(&oneWire);
 
-Ultrasonic sensor(PB7, PB8);
 GLCD lcd;
 RFM69 radio(PA4, PA0);
-unsigned long phaseEndLocal = 0; // local millis() when the current phase ends
-int lastPhase = 0;
 
 // Print state over serial (optional)
 void sendState(int state, int remainingTime) {
@@ -30,8 +27,8 @@ float calculateDistance() {
   if (temp == DEVICE_DISCONNECTED_C)
     temp = 21;
 
-  float echoDurationUs = sensor.measurePulse(); // in microseconds
-  float distanceRoundTripCm = echoDurationUs * (331.3f + 0.606f * temp) /
+  long* echoDurationUs = HCSR04.measureMicroseconds(); // in microseconds
+  float distanceRoundTripCm = echoDurationUs[0] * (331.3f + 0.606f * temp) /
                               10000.0f; // Calculate distance with temperature
                                         // due to sound speed changes
   return distanceRoundTripCm / 2.0f;
@@ -100,13 +97,17 @@ struct SpatMessage {
 // Setup
 void setup() {
   radio.initialize(RF69_433MHZ, 2, 255); // node id, network id
-  radio.setPowerLevel(0);                // Low power for safety
+  radio.setPowerLevel(0); // Low power for safety
+
   tempSensor.begin();
   tempSensor.setWaitForConversion(false);
-  sensor.begin();
+
+  byte echoPins[] = {PB8};
+  HCSR04.begin(PB7, echoPins, 1);
+
   lcd.begin();
   lcd.setColor(255, 255, 255);
-  lcd.setTextSize(2.5);
+  lcd.setTextSize(2);
 }
 
 // Main loop
@@ -115,10 +116,14 @@ void loop() {
   float distanceCm = getAverageDistance();
   if (distanceCm != -1.0f) {
     lcd.setCursor(20, 10);
-    lcd.print("Distance: ");
+    lcd.print("Dist: ");
     lcd.print((int)distanceCm);
     lcd.println("cm  ");
   }
+  float temp = tempSensor.getTempCByIndex(0);
+  lcd.setCursor(200, 10);
+  lcd.print(temp);
+  lcd.println(" C");
 
   if (radio.receiveDone()) {
     if (radio.DATALEN == sizeof(SpatMessage)) {
