@@ -1,6 +1,6 @@
 #include <Arduino.h>
 
-const int PROTOCOL_VERSION = 2;
+const int PROTOCOL_VERSION = 1;
 const int TIME_WRAP_MS = 60000; // timestamps wrap around every minute
 const int MAX_LANES = 4;
 

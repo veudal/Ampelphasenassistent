@@ -1,4 +1,3 @@
-#include "Protocol.h"
 #include <Arduino.h>
 #include <GLCD.h>
 #include <Messages.h>
@@ -30,10 +29,10 @@ const int LANE_WIDTH_CM = 350;
 const float REF_LATITUDE = 50.0000;
 const float REF_LONGITUDE = 9.0000;
 
-const long RED_DURATION_MS = 6000;
+const long RED_DURATION_MS = 7000;
 const long RED_YELLOW_DURATION_MS = 1000;
 const long YELLOW_DURATION_MS = 3000;
-const long GREEN_DURATION_MS = 6000;
+const long GREEN_DURATION_MS = 9000;
 
 
 unsigned long getPhaseDuration() {
@@ -150,9 +149,8 @@ SignalPhase getNextPhase() {
 }
 
 void setup() {
-  //   lcd.begin();
-  //   lcd.setTextSize(2.5);
-  radio.initialize(RF69_433MHZ, NODE_ID, NETWORK_ID); // node id, network id
+  // Antenna length: (299,792,458 / (868 * 10^6) / 4 = 0,0863m = 8,63cm 
+  radio.initialize(RF69_868MHZ, NODE_ID, NETWORK_ID); // node id, network id
   radio.setPowerLevel(POWER_LEVEL);                   // low power for safety
   pinMode(GREEN_PIN, OUTPUT);
   pinMode(YELLOW_PIN, OUTPUT);
