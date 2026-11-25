@@ -1,6 +1,6 @@
 #include <Arduino.h>
 #include <DallasTemperature.h>
-#include <GLCD.h>
+#include <UTFT.h>
 #include <HCSR04.h>
 #include <Messages.h>
 #include <OneWire.h>
@@ -8,7 +8,7 @@
 
 OneWire oneWire(PB0);
 DallasTemperature tempSensor(&oneWire);
-GLCD lcd;
+UTFT lcd;
 RFM69 radio(PA4, PA0);
 
 const int NODE_ID = 2;

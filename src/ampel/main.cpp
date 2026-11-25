@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include <GLCD.h>
+#include <UTFT.h>
 #include <Messages.h>
 #include <RFM69.h>
 
@@ -10,7 +10,7 @@
 #define POTENTIOMETER_PIN PB0
 
 RFM69 radio(PA4, PA0);
-GLCD lcd;
+UTFT lcd;
 SignalPhase phase = RED;
 
 const int NODE_ID = 1;
