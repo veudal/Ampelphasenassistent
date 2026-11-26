@@ -1,15 +1,18 @@
 #include <Arduino.h>
 #include <DallasTemperature.h>
-#include <UTFT.h>
 #include <HCSR04.h>
 #include <Messages.h>
 #include <OneWire.h>
 #include <RFM69.h>
+#include <UTFT.h>
 
 OneWire oneWire(PB0);
 DallasTemperature tempSensor(&oneWire);
-UTFT lcd;
-RFM69 radio(PA4, PA0);
+RFM69 radio(PA4, PA3);
+UTFT lcd(ILI9325D_16, PD11, PD5, PD7, PC1);
+
+extern uint8_t BigFont[];
+extern uint8_t Various_Symbols_32x32[];
 
 const int NODE_ID = 2;
 const int NETWORK_ID = 255;
@@ -39,6 +42,11 @@ enum RecommendedAction {
   ACCELERATE, // speed up to make it while green
   DECELERATE  // slow down to arrive at green
 };
+
+void resetFont() {
+  lcd.setFont(BigFont);
+  lcd.setColor(255, 255, 255);
+}
 
 float calculateDistance(long echoDuration) {
   // Calculate distance with temperature due to sound speed changes
@@ -119,49 +127,51 @@ RecommendedAction stableAction() {
 }
 
 void displayRecommendedAction(RecommendedAction action) {
-  lcd.setCursor(225, 90);
-  lcd.setTextSize(8);
+  static RecommendedAction previous = NONE;
+  static bool firstDraw = true;
+
+  // Don't redraw if nothing changed
+  if (!firstDraw && action == previous)
+    return;
+
+  firstDraw = false;
+  previous = action;
+
+  lcd.setColor(0, 0, 0);
+  lcd.fillRect(200, 60, 319, 150);
+  lcd.setFont(Various_Symbols_32x32);
 
   switch (action) {
-  case KEEP:
+  case KEEP: {
     lcd.setColor(0, 190, 255);
-    lcd.write("=");
-    break;
-  case ACCELERATE:
-    lcd.setColor(70, 255, 120);
-    lcd.write(24);
-    break;
-  case DECELERATE:
-    lcd.setColor(255, 100, 100);
-    lcd.write(25);
-    break;
-  default:
-    lcd.setColor(180, 180, 180);
-    lcd.write("?");
+    lcd.print("L", 260, 100);
     break;
   }
-  // Reset
-  lcd.setColor(255, 255, 255);
-  lcd.setTextSize(2);
-}
 
+  case ACCELERATE:
+    lcd.setColor(70, 255, 120);
+    lcd.print("Q", 260, 100); // Up
+    break;
+
+  case DECELERATE:
+    lcd.setColor(255, 100, 100);
+    lcd.print("P", 260, 100); // Down
+    break;
+
+  default: {
+    lcd.setColor(180, 180, 180);
+    lcd.print("z", 260, 100);
+    break;
+  }
+  }
+  resetFont();
+}
 void displayDistanceAndSpeed() {
-  lcd.setCursor(20, 10);
-  lcd.print("Dist: ");
-  lcd.print((int)distanceCm);
-  lcd.println("cm  ");
-
-  lcd.setCursor(20, 30);
-  lcd.print("Speed: ");
-  lcd.print((int)speedCmPerS);
-  lcd.println("cm/s  ");
+  lcd.print(String("Dist: ") + (int)distanceCm + "cm  ", 20, 10);
+  lcd.print(String("Speed: ") + (int)speedCmPerS + "cm/s   ", 20, 30);
 }
 
-void displayTemperature() {
-  lcd.setCursor(220, 10);
-  lcd.print(temperature);
-  lcd.println(" C");
-}
+void displayTemperature() { lcd.print(String(temperature, 1) + " C", 220, 10); }
 
 void displaySpatMessage(const SpatMessage &spat) {
   remainingMs =
@@ -169,35 +179,20 @@ void displaySpatMessage(const SpatMessage &spat) {
   spatReceivedMs = millis();
   phase = (SignalPhase)spat.phase;
 
-  lcd.setCursor(20, 50);
-  lcd.print("Phase: ");
-  lcd.print(spat.phase);
-  lcd.print("   ");
-  lcd.setCursor(20, 70);
-  lcd.print("Ends: ");
-  lcd.print(remainingMs / 1000.0);
-  lcd.print("s     ");
+  lcd.print(String("Phase: ") + (int)spat.phase + "   ", 20, 50);
+  lcd.print(String("Ends: ") + String(remainingMs / 1000.0, 2) + "s     ", 20,
+            70);
 }
 
 void displayMapMessage(const MapMessage &map) {
-  lcd.setCursor(20, 100);
-  lcd.print("Lat: ");
-  lcd.print(map.refLatitude, 4);
-  lcd.print("   ");
-  lcd.setCursor(20, 120);
-  lcd.print("Lon: ");
-  lcd.print(map.refLongitude, 4);
-  lcd.print("   ");
+  lcd.print(String("Lat: ") + String(map.refLatitude, 4), 20, 100);
+  lcd.print(String("Lon: ") + String(map.refLongitude, 4), 20, 120);
 
   for (int i = 0; i < map.laneCount && i < MAX_LANES; i++) {
-    lcd.setCursor(20, 150 + i * 20);
-    lcd.print("L");
-    lcd.print((int)map.lanes[i].laneId);
-    lcd.print(": ");
-    lcd.print(map.lanes[i].positionXCm);
-    lcd.print(",");
-    lcd.print(map.lanes[i].positionYCm);
-    lcd.print("   ");
+    lcd.print(String("L") + (int)map.lanes[i].laneId + ": " +
+                  (int)map.lanes[i].positionXCm + "," +
+                  (int)map.lanes[i].positionYCm,
+              20, 150 + i * 20);
   }
 }
 
@@ -228,7 +223,6 @@ void updateTemperature() {
 void setup() {
   // Antenna length: (299,792,458 / (868 * 10^6) / 4 = 0,0863m = 8,63cm
   radio.initialize(RF69_868MHZ, NODE_ID, NETWORK_ID); // node id, network id
-  radio.setPowerLevel(POWER_LEVEL);                   // Low power for safety
 
   tempSensor.begin();
   tempSensor.setWaitForConversion(false);
@@ -236,9 +230,18 @@ void setup() {
   byte echoPins[] = {PB8};
   HCSR04.begin(PB7, echoPins, 1);
 
-  lcd.begin();
-  lcd.setColor(255, 255, 255);
-  lcd.setTextSize(2);
+  lcd.InitLCD();
+
+  // Rotate screen by 180 degrees
+  digitalWrite(PD7, LOW);
+  lcd.LCD_Write_COM_DATA(0x01, 0x0000); // mirror horizontally
+  lcd.LCD_Write_COM_DATA(0x60, 0x2700); // mirror vertically
+  digitalWrite(PD7, HIGH);
+
+  lcd.setColor(0, 0, 0);
+  lcd.fillRect(0, 0, lcd.getDisplayXSize() - 1, lcd.getDisplayYSize() - 1);
+
+  resetFont();
 }
 
 // Main loop

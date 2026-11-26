@@ -1,7 +1,7 @@
 #include <Arduino.h>
-#include <UTFT.h>
 #include <Messages.h>
 #include <RFM69.h>
+#include <UTFT.h>
 
 #define GREEN_PIN PA8
 #define YELLOW_PIN PA9
@@ -9,13 +9,13 @@
 
 #define POTENTIOMETER_PIN PB0
 
-RFM69 radio(PA4, PA0);
-UTFT lcd;
+RFM69 radio(PA4, PA3);
+UTFT lcd(ILI9325D_16, PD11, PD5, PD7, PC1);
 SignalPhase phase = RED;
 
 const int NODE_ID = 1;
 const int NETWORK_ID = 255;
-const short POWER_LEVEL = 0;
+const short POWER_LEVEL = 10;
 
 int sendIntervalMs = 100;
 
@@ -34,6 +34,16 @@ const long RED_YELLOW_DURATION_MS = 1000;
 const long YELLOW_DURATION_MS = 3000;
 const long GREEN_DURATION_MS = 9000;
 
+int height;
+int width;
+
+struct ActiveLights {
+  bool red;
+  bool yellow;
+  bool green;
+};
+
+ActiveLights lights;
 
 unsigned long getPhaseDuration() {
   switch (phase) {
@@ -101,14 +111,53 @@ void broadcastSpatMessage(unsigned long timeRemainingMs) {
   radio.send(RF69_BROADCAST_ADDR, &spat, sizeof(SpatMessage));
 }
 
-void setLights() {
-  digitalWrite(RED_PIN, phase == RED || phase == RED_YELLOW);
-  digitalWrite(YELLOW_PIN, phase == YELLOW || phase == RED_YELLOW);
-  digitalWrite(GREEN_PIN, phase == GREEN);
+ActiveLights getActiveLights() {
+  ActiveLights lights;
+
+  lights.red = phase == RED || phase == RED_YELLOW;
+  lights.yellow = phase == YELLOW || phase == RED_YELLOW;
+  lights.green = phase == GREEN;
+
+  return lights;
+}
+
+void initTrafficLight() {
+  width = lcd.getDisplayXSize();
+  height = lcd.getDisplayYSize();
+
+  // Background
+  lcd.setColor(255, 255, 255);
+  lcd.fillRect(0, 0, width - 1, height - 1);
+
+  // Traffic Light
+  lcd.setColor(0, 0, 0);
+  lcd.fillRoundRect(5, 65, width - 5, height - 65);
+}
+
+void drawLights() {
+  int centerY = height / 2;
+  int radius = 40;
+
+  lcd.setColor(0, lights.green ? 255 : 22, lights.green ? 0 : 3);
+  lcd.fillCircle(55, centerY, radius);
+
+  lcd.setColor(lights.yellow ? 255 : 30, lights.yellow ? 255 : 22, 0);
+  lcd.fillCircle(160, centerY, radius);
+
+  lcd.setColor(lights.red ? 255 : 25, 0, 0);
+  lcd.fillCircle(265, centerY, radius);
+}
+
+void setPhysicalLights() {
+  digitalWrite(RED_PIN, lights.red);
+  digitalWrite(YELLOW_PIN, lights.yellow);
+  digitalWrite(GREEN_PIN, lights.green);
 }
 
 void applyPhase() {
-  setLights();
+  lights = getActiveLights();
+  setPhysicalLights();
+  drawLights();
   unsigned long start = millis();
   unsigned long duration = getPhaseDuration();
   unsigned long lastMapBroadcast = 0;
@@ -149,13 +198,16 @@ SignalPhase getNextPhase() {
 }
 
 void setup() {
-  // Antenna length: (299,792,458 / (868 * 10^6) / 4 = 0,0863m = 8,63cm 
+  // Antenna length: (299,792,458 / (868 * 10^6) / 4 = 0,0863m = 8,63cm
   radio.initialize(RF69_868MHZ, NODE_ID, NETWORK_ID); // node id, network id
   radio.setPowerLevel(POWER_LEVEL);                   // low power for safety
   pinMode(GREEN_PIN, OUTPUT);
   pinMode(YELLOW_PIN, OUTPUT);
   pinMode(RED_PIN, OUTPUT);
   pinMode(POTENTIOMETER_PIN, INPUT);
+
+  lcd.InitLCD();
+  initTrafficLight();
 }
 
 void loop() {
