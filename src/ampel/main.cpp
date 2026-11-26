@@ -100,10 +100,10 @@ void broadcastSpatMessage(unsigned long timeRemainingMs) {
   spat.regionId = REGION_ID;
   spat.intersectionId = INTERSECTION_ID;
   spat.revision = REVISION;
-  spat.timeStampMs = millis() % TIME_WRAP_MS;
+  spat.timeStampMs = millis();
   spat.signalGroupId = SIGNAL_GROUP_ID;
   spat.phase = phase;
-  spat.phaseEndsAt = (millis() + timeRemainingMs) % TIME_WRAP_MS;
+  spat.phaseEndsAt = millis() + timeRemainingMs;
 
   radio.send(RF69_BROADCAST_ADDR, &spat, sizeof(SpatMessage));
 }

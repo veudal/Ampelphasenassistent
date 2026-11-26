@@ -26,7 +26,7 @@ float distanceCm = -1;
 float speedCmPerS = 0; // cm/s, positive values mean:  approaching
 unsigned long lastMs = 0;
 
-int remainingMs = -1;
+long remainingMs = -1;
 int stopLineOffsetCm = 0;
 SignalPhase phase;
 
@@ -35,7 +35,7 @@ const float MIN_APPROACH_CMPS = 1; // slower than this: not really approaching
 const float MAX_SPEED_CMPS = 50;
 const long MARGIN_MS = 500; // safety buffer around phase changes
 
-unsigned long spatReceivedMs = 0;          // set when a SPaT message arrives
+unsigned long spatReceivedMs = 0; // set when a SPaT message arrives
 const unsigned long MAX_MSG_AGE_MS = 2000;
 
 enum RecommendedAction {
@@ -147,23 +147,23 @@ void displayRecommendedAction(RecommendedAction action) {
   switch (action) {
   case KEEP: {
     lcd.setColor(0, 190, 255);
-    lcd.print("L", 260, 100);
+    lcd.print("L", 260, 100); // Happy smiley
     break;
   }
 
   case ACCELERATE:
     lcd.setColor(70, 255, 120);
-    lcd.print("Q", 260, 100); // Up
+    lcd.print("Q", 260, 100); // Up arrow
     break;
 
   case DECELERATE:
     lcd.setColor(255, 100, 100);
-    lcd.print("P", 260, 100); // Down
+    lcd.print("P", 260, 100); // Down arrow
     break;
 
   default: {
     lcd.setColor(180, 180, 180);
-    lcd.print("z", 260, 100);
+    lcd.print("z", 260, 100); // Hourglass symbol (waiting for signal)
     break;
   }
   }
@@ -177,8 +177,6 @@ void displayDistanceAndSpeed() {
 void displayTemperature() { lcd.print(String(temperature, 1) + " C", 220, 10); }
 
 void displaySpatMessage(const SpatMessage &spat) {
-  remainingMs =
-      (spat.phaseEndsAt - spat.timeStampMs + TIME_WRAP_MS) % TIME_WRAP_MS;
   spatReceivedMs = millis();
   phase = (SignalPhase)spat.phase;
 
@@ -187,11 +185,16 @@ void displaySpatMessage(const SpatMessage &spat) {
             70);
 }
 
-bool isTimestampFresh(uint32_t msgTimestampMs) {
-  uint32_t wrapMs = TIME_WRAP_MS;
-  uint32_t nowMs = millis() % wrapMs;
-  uint32_t ageMs = (nowMs + wrapMs - (msgTimestampMs % wrapMs)) % wrapMs;
-  return ageMs <= MAX_MSG_AGE_MS;
+bool isTimestampFresh(uint32_t ts) {
+  static uint32_t lastTs = 0;
+  int32_t delta = ts - lastTs; // newer = positive
+
+  // Duplicate or slightly older than the newest message: drop
+  if (delta <= 0 && delta > -(int32_t)MAX_MSG_AGE_MS)
+    return false;
+
+  lastTs = ts;
+  return true;
 }
 
 void displayMapMessage(const MapMessage &map) {
@@ -224,6 +227,7 @@ void receiveRadioMessage() {
     if (!isTimestampFresh(spat.timeStampMs))
       return;
 
+    remainingMs = (long)(spat.phaseEndsAt - spat.timeStampMs);
     displaySpatMessage(spat);
   } else if (radio.DATALEN == sizeof(MapMessage)) {
     MapMessage map;

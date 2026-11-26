@@ -1,7 +1,6 @@
 #include <Arduino.h>
 
 const int PROTOCOL_VERSION = 1;
-const int TIME_WRAP_MS = 60000; // timestamps wrap around every minute
 const int MAX_LANES = 2;
 
 enum MessageType { MESSAGE_SPAT = 4, MESSAGE_MAP = 5 };
@@ -18,8 +17,8 @@ enum LaneDirection { LANE_INGRESS, LANE_EGRESS };
 enum Maneuver { MANEUVER_NONE, MANEUVER_STRAIGHT };
 
 struct SpatMessage {
-  uint16_t timeStampMs;
-  uint16_t phaseEndsAt;
+  uint32_t timeStampMs;
+  uint32_t phaseEndsAt;
   uint16_t stationId;
   uint8_t protocolVersion;
   uint8_t messageType;
