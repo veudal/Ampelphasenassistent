@@ -27,6 +27,7 @@ float speedCmPerS = 0; // cm/s, positive values mean:  approaching
 unsigned long lastMs = 0;
 
 int remainingMs = -1;
+int stopLineOffsetCm = 0;
 SignalPhase phase;
 
 const float MIN_DISTANCE_CM = 10;  // closer than this: ignore
@@ -34,7 +35,8 @@ const float MIN_APPROACH_CMPS = 1; // slower than this: not really approaching
 const float MAX_SPEED_CMPS = 50;
 const long MARGIN_MS = 500; // safety buffer around phase changes
 
-unsigned long spatReceivedMs = 0; // set when a SPaT message arrives
+unsigned long spatReceivedMs = 0;          // set when a SPaT message arrives
+const unsigned long MAX_MSG_AGE_MS = 2000;
 
 enum RecommendedAction {
   NONE,       // no signal data
@@ -83,15 +85,16 @@ RecommendedAction getRecommendedAction() {
     return NONE;
 
   long remaining = remainingMs - (long)(millis() - spatReceivedMs);
+  float targetDistanceCm = max(0.0f, distanceCm - stopLineOffsetCm);
 
   // Standing still or very slow: accelerate on green, otherwise "="
   if (speedCmPerS < MIN_APPROACH_CMPS)
     return (phase == GREEN && remaining > MARGIN_MS) ? ACCELERATE : KEEP;
 
   if (remaining <= 0)
-    return KEEP; // waiting for new SPaT: no change
+    return KEEP; // waiting for new SPaT
 
-  float arrivalMs = distanceCm / speedCmPerS * 1000.0f;
+  float arrivalMs = targetDistanceCm / speedCmPerS * 1000.0f;
 
   if (phase == GREEN) {
     // Make it on current speed
@@ -103,16 +106,16 @@ RecommendedAction getRecommendedAction() {
       return DECELERATE;
 
     // Speed needed to arrive before green ends
-    float requiredCmps = distanceCm / ((remaining - MARGIN_MS) / 1000.0f);
+    float requiredCmps = targetDistanceCm / ((remaining - MARGIN_MS) / 1000.0f);
     return (requiredCmps <= MAX_SPEED_CMPS) ? ACCELERATE : DECELERATE;
   }
 
   // Not green: remaining = time until the light turns green (assumption)
   if (arrivalMs >= remaining + MARGIN_MS)
-    return KEEP;     // arrive after it turned green
+    return KEEP; // arrive after it turned green
+
   return DECELERATE; // would arrive on red/yellow
 }
-
 RecommendedAction stableAction() {
   static RecommendedAction shown = NONE, pending = NONE;
   static unsigned long pendingSince = 0;
@@ -184,6 +187,13 @@ void displaySpatMessage(const SpatMessage &spat) {
             70);
 }
 
+bool isTimestampFresh(uint32_t msgTimestampMs) {
+  uint32_t wrapMs = TIME_WRAP_MS;
+  uint32_t nowMs = millis() % wrapMs;
+  uint32_t ageMs = (nowMs + wrapMs - (msgTimestampMs % wrapMs)) % wrapMs;
+  return ageMs <= MAX_MSG_AGE_MS;
+}
+
 void displayMapMessage(const MapMessage &map) {
   lcd.print(String("Lat: ") + String(map.refLatitude, 4), 20, 100);
   lcd.print(String("Lon: ") + String(map.refLongitude, 4), 20, 120);
@@ -191,22 +201,38 @@ void displayMapMessage(const MapMessage &map) {
   for (int i = 0; i < map.laneCount && i < MAX_LANES; i++) {
     lcd.print(String("L") + (int)map.lanes[i].laneId + ": " +
                   (int)map.lanes[i].positionXCm + "," +
-                  (int)map.lanes[i].positionYCm,
+                  (int)map.lanes[i].positionYCm + "   ",
               20, 150 + i * 20);
+  }
+
+  if (map.laneCount > 0) {
+    stopLineOffsetCm = map.lanes[0].stopLineOffsetCm;
   }
 }
 
 void receiveRadioMessage() {
-  if (radio.receiveDone()) {
-    if (radio.DATALEN == sizeof(SpatMessage)) {
-      SpatMessage spat;
-      memcpy(&spat, (const void *)radio.DATA, sizeof(spat));
-      displaySpatMessage(spat);
-    } else if (radio.DATALEN == sizeof(MapMessage)) {
-      MapMessage map;
-      memcpy(&map, (const void *)radio.DATA, sizeof(map));
-      displayMapMessage(map);
-    }
+  if (!radio.receiveDone())
+    return;
+
+  if (radio.DATALEN == sizeof(SpatMessage)) {
+    SpatMessage spat;
+    memcpy(&spat, (const void *)radio.DATA, sizeof(spat));
+    if (spat.protocolVersion != PROTOCOL_VERSION ||
+        spat.messageType != MESSAGE_SPAT)
+      return;
+
+    if (!isTimestampFresh(spat.timeStampMs))
+      return;
+
+    displaySpatMessage(spat);
+  } else if (radio.DATALEN == sizeof(MapMessage)) {
+    MapMessage map;
+    memcpy(&map, (const void *)radio.DATA, sizeof(map));
+    if (map.protocolVersion != PROTOCOL_VERSION ||
+        map.messageType != MESSAGE_MAP)
+      return;
+
+    displayMapMessage(map);
   }
 }
 

@@ -26,8 +26,8 @@ const int REVISION = 1;
 const int SIGNAL_GROUP_ID = 1;
 
 const int LANE_WIDTH_CM = 350;
-const float REF_LATITUDE = 50.0000;
-const float REF_LONGITUDE = 9.0000;
+const float REF_LATITUDE = 0.0;
+const float REF_LONGITUDE = 0.0;
 
 const long RED_DURATION_MS = 7000;
 const long RED_YELLOW_DURATION_MS = 1000;
@@ -83,15 +83,12 @@ void broadcastMapMessage() {
   map.refLatitude = REF_LATITUDE;
   map.refLongitude = REF_LONGITUDE;
   map.laneWidthCm = LANE_WIDTH_CM;
-  map.laneCount = 4;
+  map.laneCount = 2;
 
-  map.lanes[0] = makeLane(1, LANE_INGRESS, MANEUVER_STRAIGHT, -175, 500, 4,
+  map.lanes[0] = makeLane(1, LANE_INGRESS, MANEUVER_STRAIGHT, -30, 200, 2,
                           SIGNAL_GROUP_ID);
-  map.lanes[1] = makeLane(2, LANE_EGRESS, MANEUVER_NONE, 175, 500, 0, 0);
-  map.lanes[2] = makeLane(3, LANE_INGRESS, MANEUVER_STRAIGHT, 175, -500, 2,
+  map.lanes[1] = makeLane(2, LANE_INGRESS, MANEUVER_STRAIGHT, 30, -200, 1,
                           SIGNAL_GROUP_ID);
-  map.lanes[3] = makeLane(4, LANE_EGRESS, MANEUVER_NONE, -175, -500, 0, 0);
-
   radio.send(RF69_BROADCAST_ADDR, &map, sizeof(MapMessage));
 }
 

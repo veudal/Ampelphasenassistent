@@ -2,7 +2,7 @@
 
 const int PROTOCOL_VERSION = 1;
 const int TIME_WRAP_MS = 60000; // timestamps wrap around every minute
-const int MAX_LANES = 4;
+const int MAX_LANES = 2;
 
 enum MessageType { MESSAGE_SPAT = 4, MESSAGE_MAP = 5 };
 
@@ -38,6 +38,7 @@ struct Lane {
   uint8_t maneuver;
   uint8_t connectsToLane;
   uint8_t signalGroupId;
+  uint8_t stopLineOffsetCm;
 };
 
 struct MapMessage {
